@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<title>Tic-Tac-Toe</title>
+<style type="text/css">
+    div {
+        text-align: center;
+        padding-top: 50px;
+    }
+
+    table {
+        margin: auto;
+        margin-top: 50px;
+    }
+
+    table td {
+        width: 100px;
+        height: 100px;
+        border: 1px solid black;
+        text-align: center;
+    }
+
+    table td.ex {
+        color: red;
+        font-weight: bold;
+        font-size: 40px;
+    }
+
+    table td.ex:before {
+        content: 'X';
+    }
+
+    table td.oh {
+        color: blue;
+        font-weight: bold;
+        font-size: 40px;
+    }
+
+    table td.oh:before {
+        content: 'O';
+    }
+</style>
+<script type="application/javascript" src="./bower_components/vue/dist/vue.min.js"></script>
+<script type="application/javascript" src="./bower_components/lodash/dist/lodash.min.js"></script>
+<script type="application/javascript" src="./bower_components/raven-js/dist/raven.min.js"></script>
+<script type="application/javascript" src="./bower_components/raven-js/dist/plugins/vue.min.js"></script>
+<script>
+    Raven
+    .config('https://aca9eaea67d94394b21b7788bc30041f@sentry.io/301736')
+    .addPlugin(Raven.Plugins.Vue)
+    .install();
+</script>
+</head>
+<body>
+
+<div id="tic_tac_toe">
+
+    <h1>Tic-Tac-Toe</h1>
+
+    <table>
+        <tr v-for="row in game.cells">
+            <td v-for="cell in row" v-bind:class="cellClass(cell)" v-on:click="tick(cell)">
+            </td>
+        </tr>
+    </table>
+
+    <table>
+        <tr>
+            <td>Turn</td>
+            <td v-if="game.gameOver">
+                <button v-on:click="restart()">Play Again</button>
+            </td>
+            <td v-else>{{game.turn}}</td>
+        </tr>
+        <tr>
+            <td>Result</td>
+            <td>{{game.result}}</td>
+        </tr>
+    </table>
+
+</div>
+
+<script type="application/javascript">
+
+    let gameNumber = 1;
+    let playLog = [];
+
+    class Game {
+
+        /**
+         *
+         */
+        constructor() {
+            this.cells = [];
+            this.indexedCells = [];
+            this.opponent = 'computer';
+            this.turn = 0;
+            this.winner = 0;
+            playLog = [];
+            for (let y = 0; y < 3; y++) {
+                const row = [];
+                for (let x = 0; x < 3; x++) {
+                    const cell = new Cell(this, x, y, 0);
+                    row.push(cell);
+                    this.indexedCells.push(cell);
+                }
+                this.cells.push(row);
+            }
+            console.group('Game ' + gameNumber);
+        }
+
+        get currentPlayer() {
+            if (this.turn % 2 === 0) {
+                return 'player';
+            }
+            return this.opponent;
+        }
+
+        get currentColor() {
+            return this.turn % 2 === 0 ? 'red' : 'blue';
+        }
+
+        get currentMark() {
+            return -1 * Math.round(((this.turn % 2) - 0.5) * 2);
+        }
+
+        get textView() {
+            // a textual representation of the current game state
+            const rowMarkings = [];
+            for(const row of this.cells){
+                const markings = [];
+                for (const cell of row){
+                    let marking = ' ';
+                    if(cell.mark === 1){
+                        marking = 'X';
+                    }else if(cell.mark === -1){
+                        marking = 'O';
+                    }
+                    markings.push(marking);
+                }
+                const rowMarking = markings.join(' | ');
+                rowMarkings.push(rowMarking);
+            }
+            return rowMarkings.join('\n');
+        }
+
+        get gameOver() {
+            if (this.winner !== 0) {
+                return true;
+            }
+
+            /*
+            // if there is no single constellation that is either empty ot has only one color, it's a draw
+            const potentialWinConstellation = _.find(this.constellations, (currentConstellation) => {
+                const exclusion = _.filter(currentConstellation, { mark: -1 * this.currentMark });
+                return exclusion.length === 0;
+            });
+
+            const potentialLossConstellation = _.find(this.constellations, (currentConstellation) => {
+                const exclusion = _.filter(currentConstellation, { mark: this.currentMark });
+                return exclusion.length === 0;
+            });
+
+            if(!_.isArray(potentialWinConstellation) && !_.isArray(potentialLossConstellation)){
+                return true;
+            }
+            */
+
+            return this.turn >= 9;
+        }
+
+        get result() {
+            if (this.winner === 1) {
+                if (this.opponent === 'computer') {
+                    Raven.setExtraContext({ gameLog: playLog, gameState: this.textView });
+                    Raven.captureMessage('Computer Loss', {
+                        level: 'warning' // one of 'info', 'warning', or 'error'
+                    });
+                }
+                return 'red';
+            } else if (this.winner === -1) {
+                return 'blue';
+            }
+            if (this.gameOver) {
+                return 'draw';
+            }
+            return null;
+        }
+
+        get constellations() {
+            return _.shuffle([
+                ...this.rows,
+                ...this.columns,
+                ...this.diagonals
+            ]);
+        }
+
+        get rows() {
+            return _.shuffle([
+                [this.indexedCells[0], this.indexedCells[1], this.indexedCells[2]],
+                [this.indexedCells[3], this.indexedCells[4], this.indexedCells[5]],
+                [this.indexedCells[6], this.indexedCells[7], this.indexedCells[8]]
+            ]);
+        }
+
+        get columns() {
+            return _.shuffle([
+                [this.indexedCells[0], this.indexedCells[3], this.indexedCells[6]],
+                [this.indexedCells[1], this.indexedCells[4], this.indexedCells[7]],
+                [this.indexedCells[2], this.indexedCells[5], this.indexedCells[8]]
+            ]);
+        }
+
+        get diagonals() {
+            return _.shuffle([
+                [this.indexedCells[0], this.indexedCells[4], this.indexedCells[8]],
+                [this.indexedCells[2], this.indexedCells[4], this.indexedCells[6]]
+            ]);
+        }
+
+        playTurn() {
+            console.log(this.textView);
+            this.turn++;
+            // check if a player won or if there's a draw
+            const winConstellation = this.findConstellationWithSum(this.currentMark * 3);
+            if (_.isArray(winConstellation)) {
+                // the current player has won
+                this.winner = this.currentMark;
+                return;
+            }
+
+            const lossConstellation = this.findConstellationWithSum(this.currentMark * -3);
+            if (_.isArray(lossConstellation)) {
+                this.winner = -1 * this.currentMark;
+            }
+        }
+
+        playComputerTurn() {
+            if (this.gameOver) {
+                return;
+            }
+
+            if (this.turn === 1) {
+                // this.tickRandomCell();
+                // this.playTurn();
+                // return;
+            }
+
+            // first, try wining
+            // that is easily done by summing the rows, columns and diagonals and checking where the value is 2
+            if (this.attemptWin()) {
+                this.playTurn();
+                return;
+            }
+
+            if (this.preventLoss()) {
+                this.playTurn();
+                return;
+            }
+
+            if (this.preventTrap()) {
+                this.playTurn();
+                return;
+            }
+
+            if (this.attemptTrap()) {
+                this.playTurn();
+                return;
+            }
+
+            console.log('random play');
+            console.table(playLog);
+            Raven.setExtraContext({ gameLog: playLog, gameState: this.textView });
+            Raven.captureMessage('Random Computer Turn', {
+                level: 'warning' // one of 'info', 'warning', or 'error'
+            });
+
+            this.tickRandomCell();
+            this.playTurn();
+        }
+
+
+        tickRandomCell(cells, allowAny = true) {
+            // in the first turn, we want to randomize the computer's response
+            let emptyCells = _.filter(this.indexedCells, { mark: 0 });
+            // emptyCells = _.filter(_.at(this.indexedCells, [4]), { mark: 0 });
+            if (_.isArray(cells)) {
+                emptyCells = _.filter(cells, { mark: 0 });
+            } else if (!allowAny) {
+                return false;
+            }
+            if (_.isEmpty(emptyCells)) {
+                return false;
+            }
+            const randomIndex = _.random(0, emptyCells.length - 1, false);
+            const cell = emptyCells[randomIndex];
+            cell.mark = this.currentMark;
+            playLog.push({
+                color: this.currentColor,
+                x: cell.x,
+                y: cell.y
+            });
+            return true;
+        }
+
+        attemptWin() {
+            const winnableConstellation = this.findConstellationWithSum(this.currentMark * 2);
+            if (this.tickRandomCell(winnableConstellation, false)) {
+                return true;
+            }
+            return false;
+        }
+
+        preventLoss() {
+            const potentialLossConstellation = this.findConstellationWithSum(this.currentMark * -2);
+            if (this.tickRandomCell(potentialLossConstellation, false)) {
+                return true;
+            }
+            return false;
+        }
+
+        preventTrap() {
+            /*
+            There are multiple trap constructions.
+
+            One is with a shared row and column, both with value 1, and a shared empty cell.
+            In that case, that empty cell needs to be filled.
+
+            Some traps are extremely dangerous, such as when a diagonal has two opponent's marks at its ends.
+            In that event, the immediate course of action is to prevent an opponent's win by forcing them to respond
+            to your construction without permitting a the trip to finish.
+
+
+            */
+
+            // first, let's prevent the so-called diagonal trap
+            // if the trap is there, it's alreadt too late
+            if (this.preventDiagonalTrap()) {
+                return true;
+            }
+
+            // second, let's prevent the row-column trap
+            // that is when a row and a column filled by the opponent have one empty cell in common
+            if (this.preventRowColumnTrap()) {
+                return true;
+            }
+
+            // if there's just one single cell and it's in a corner, don't use an adjacent corner for the next step
+            if (this.exemptDefaultTraps()) {
+                return true;
+            }
+
+            return false;
+        }
+
+        preventDiagonalTrap() {
+            // this is the trap where the opponent has a mark on two opposing ends of a diagonal
+            // find all edge points
+            const edge1 = this.indexedCells[0];
+            const edge2 = this.indexedCells[2];
+            const edge3 = this.indexedCells[6];
+            const edge4 = this.indexedCells[8];
+            const center = this.indexedCells[4];
+
+            // find a diagonal that has two opponent's markings within it
+            const trapDiagonal = _.find(this.diagonals, (currentDiagonal) => {
+                const opponentMarkings = _.filter(currentDiagonal, { mark: -1 * this.currentMark });
+                return opponentMarkings.length >= 2;
+            });
+
+            if (!_.isArray(trapDiagonal)) {
+                return false;
+            }
+
+            const ownMark = _.find(trapDiagonal, { mark: this.currentMark });
+            if (ownMark === center) {
+                // if it's in the center, mark any neighbor for the center
+                // the center is already marked by us. If the center were empty, we would be busy filling it
+                // and if the center is marked by the opponent, they have already won
+                const centerNeighbors = _.at(this.indexedCells, [1, 3, 5, 7]);
+                return this.tickRandomCell(centerNeighbors, false);
+            }
+
+            // if it's one of the corners, we need to mark another corner
+            const markNeighborCorners = _.filter(this.indexedCells, (currentCell) => {
+                const deltaX = Math.abs(ownMark.x - currentCell.x);
+                const deltaY = Math.abs(ownMark.y - currentCell.y);
+                const manhattanDistance = deltaX + deltaY;
+                return (manhattanDistance === 2 && deltaX !== deltaY);
+            });
+
+            return this.tickRandomCell(markNeighborCorners, false);
+
+            // now, the objective is to coerce the opponent into acting
+            // let's find a column or row where only the center is marked
+            // if any of the neighbors were filled by the opponent, they'd already have two in a row
+
+            // const neighbors = _.intersection(markNeighbors, centerNeighbors);
+
+        }
+
+        preventRowColumnTrap() {
+            // find the one empty cell that a row and a column might have in common
+
+            // to do that, let's first find all the cells marked by our opponent
+            const opponentCells = _.filter(this.indexedCells, { mark: this.currentMark * -1 });
+            if (opponentCells.length < 2) {
+                return false;
+            }
+            for (let i = 0; i < opponentCells.length - 1; i++) {
+                const cell1 = opponentCells[i];
+                for (let j = i + 1; j < opponentCells.length; j++) {
+                    const cell2 = opponentCells[j];
+                    if (cell1.x === cell2.x || cell1.y === cell2.y) {
+                        continue;
+                    }
+
+                    if (this.isOnlyRowElement(cell1) && this.isOnlyColumnElement(cell2)) {
+                        const attackPoint = this.cells[cell1.y][cell2.x];
+                        if (this.tickRandomCell([attackPoint], false)) {
+                            return true;
+                        }
+                    }
+
+                    if (this.isOnlyRowElement(cell2) && this.isOnlyColumnElement(cell1)) {
+                        const attackPoint = this.cells[cell2.y][cell1.x];
+                        if (this.tickRandomCell([attackPoint], false)) {
+                            return true;
+                        }
+                    }
+
+                }
+            }
+        }
+
+        exemptDefaultTraps() {
+            const center = this.indexedCells[4];
+            if (this.tickRandomCell([center], false)) {
+                return true;
+            }
+
+            const edge1 = this.indexedCells[0];
+            const edge2 = this.indexedCells[2];
+            const edge3 = this.indexedCells[6];
+            const edge4 = this.indexedCells[8];
+            const edges = [edge1, edge2, edge3, edge4];
+
+            if (this.tickRandomCell(edges, false)) {
+                return true;
+            }
+
+            // const opponentEdges = _.filter(edges, { mark: this.currentMark * -1 });
+            // if(opponentEdges.length > 0){
+            //     // mark the center cell
+            //     const center = this.indexedCells[4];
+            //     return this.tickRandomCell([center], false);
+            // }
+            // return false;
+        }
+
+        attemptTrap() {
+
+        }
+
+        findConstellationWithSum(expectedSum) {
+            const constellations = this.constellations;
+            const constellation = _.find(constellations, (currentConstellation) => {
+                return _.sumBy(currentConstellation, 'mark') === expectedSum;
+            });
+
+            if (_.isArray(constellation)) {
+                return constellation;
+            }
+
+            return null;
+        }
+
+        isOnlyRowElement(cell) {
+            const row = this.cells[cell.y];
+            const emptyCells = _.filter(row, { mark: 0 });
+            return emptyCells.length === 2;
+        }
+
+        isOnlyColumnElement(cell) {
+            const column = _.filter(this.indexedCells, { x: cell.x });
+            const emptyCells = _.filter(column, { mark: 0 });
+            return emptyCells.length === 2;
+        }
+
+    }
+
+    class Cell {
+
+        /**
+         *
+         * @param game
+         * @param x
+         * @param y
+         * @param value
+         */
+        constructor(game, x, y, value) {
+            this.game = game;
+            this.x = x;
+            this.y = y;
+            this.mark = value;
+        }
+
+        get index() {
+            return this.y * 3 + this.x;
+        }
+
+        tick() {
+            if (this.game.gameOver) {
+                return;
+            }
+            if (this.mark === 0) {
+                this.mark = this.game.currentMark;
+            }
+            playLog.push({
+                color: this.game.currentColor,
+                x: this.x,
+                y: this.y
+            });
+            this.game.playTurn();
+            if (this.game.currentPlayer === 'computer') {
+                this.game.playComputerTurn();
+            }
+        }
+
+    }
+
+    const app = new Vue({
+        el: '#tic_tac_toe',
+        data: {
+            game: new Game()
+        },
+        watch: {},
+        methods: {
+            /**
+             *
+             * @param cell
+             * @returns {*}
+             */
+            cellClass: function(cell) {
+                const value = cell.mark;
+                if (value === -1) {
+                    return 'oh';
+                }
+                if (value === 1) {
+                    return 'ex';
+                }
+                return null;
+            },
+            tick: function(cell) {
+                cell.tick();
+            },
+            restart: function() {
+                console.groupEnd();
+                gameNumber++;
+                Raven.setExtraContext();
+                this.game = new Game();
+            }
+        }
+    });
+</script>
+
+</body>
+</html>

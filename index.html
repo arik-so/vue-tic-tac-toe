@@ -126,13 +126,13 @@
         get textView() {
             // a textual representation of the current game state
             const rowMarkings = [];
-            for(const row of this.cells){
+            for (const row of this.cells) {
                 const markings = [];
-                for (const cell of row){
+                for (const cell of row) {
                     let marking = ' ';
-                    if(cell.mark === 1){
+                    if (cell.mark === 1) {
                         marking = 'X';
-                    }else if(cell.mark === -1){
+                    } else if (cell.mark === -1) {
                         marking = 'O';
                     }
                     markings.push(marking);
@@ -514,6 +514,8 @@
             }
             if (this.mark === 0) {
                 this.mark = this.game.currentMark;
+            } else {
+                return;
             }
             playLog.push({
                 color: this.game.currentColor,
